@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f0f2f5;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  color: #111;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Chat bubble pattern (subtle) */
+.chat-bg {
+  background-color: #ECE5DD;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60'><circle cx='10' cy='10' r='1' fill='%23000' opacity='0.03'/><circle cx='40' cy='30' r='1' fill='%23000' opacity='0.03'/></svg>");
+}
+
+.bubble-out {
+  background: #DCF8C6;
+  border-radius: 8px 0 8px 8px;
+}
+.bubble-in {
+  background: #fff;
+  border-radius: 0 8px 8px 8px;
+}
+
+/* RTL tweaks */
+[dir='rtl'] .bubble-out {
+  border-radius: 0 8px 8px 8px;
+}
+[dir='rtl'] .bubble-in {
+  border-radius: 8px 0 8px 8px;
+}
+
+/* Scrollbar */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}

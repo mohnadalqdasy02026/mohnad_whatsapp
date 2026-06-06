@@ -1,0 +1,226 @@
+// Prisma schema for Arabic WhatsApp Team Inbox
+// Multi-tenant: كل البيانات مربوطة بـ companyId
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  AGENT
+}
+
+enum SessionStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  FAILED
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  LOCATION
+  CONTACT
+}
+
+model Company {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  email       String   @unique
+  phone       String?
+  plan        String   @default("free")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users               User[]
+  whatsappSessions    WhatsAppSession[]
+  contacts            Contact[]
+  conversations       Conversation[]
+  tags                Tag[]
+  notes               Note[]
+
+  @@index([slug])
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(AGENT)
+  isActive     Boolean  @default(true)
+  avatarUrl    String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  assignedConversations ConversationAssignment[]
+  sentMessages          Message[]                @relation("MessageSender")
+  notes                 Note[]
+
+  @@index([companyId])
+  @@index([email])
+}
+
+model WhatsAppSession {
+  id          String        @id @default(uuid())
+  companyId   String        @unique
+  status      SessionStatus @default(DISCONNECTED)
+  phoneNumber String?
+  pushName    String?
+  qrCode      String?       // last QR (base64 or raw)
+  lastError   String?
+  connectedAt DateTime?
+  disconnectedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  companyId String
+  // WhatsApp identifiers
+  jid       String   // e.g. 9665xxxxxxxx@s.whatsapp.net
+  phone     String   // E.164
+  name      String?
+  pushName  String?
+  profilePicUrl String?
+  // Custom fields
+  tags      String[] // Postgres text[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
+
+  @@unique([companyId, jid])
+  @@index([companyId])
+  @@index([phone])
+}
+
+model Conversation {
+  id        String             @id @default(uuid())
+  companyId String
+  contactId String
+  status    ConversationStatus @default(OPEN)
+  lastMessageAt DateTime?
+  unreadCount   Int            @default(0)
+  // cached last message preview
+  lastMessagePreview String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  messages Message[]
+  assignment ConversationAssignment?
+  notes   Note[]
+
+  @@unique([companyId, contactId])
+  @@index([companyId, status])
+  @@index([companyId, lastMessageAt])
+}
+
+model ConversationAssignment {
+  id             String   @id @default(uuid())
+  conversationId String   @unique
+  userId         String
+  assignedAt     DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Message {
+  id             String          @id @default(uuid())
+  conversationId String
+  companyId      String          // denormalized for fast filtering
+  senderId       String?         // null for inbound
+  direction      MessageDirection
+  type           MessageType     @default(TEXT)
+  status         MessageStatus   @default(PENDING)
+  body           String?         // text body
+  mediaUrl       String?
+  mimeType       String?
+  // WhatsApp message id (for status updates)
+  waMessageId    String?         @unique
+  // For replies / quoted messages
+  quotedMessageId String?
+  // metadata
+  metadata       Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?         @relation("MessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([companyId, createdAt])
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  companyId String
+  name      String
+  color     String   @default("#25D366")
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+}
+
+model Note {
+  id             String   @id @default(uuid())
+  conversationId String
+  userId         String
+  companyId      String   // denormalized
+  body           String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
